@@ -1,0 +1,28 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "FitFlow: 安装前端依赖",
+      "type": "shell",
+      "command": "npm install",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "problemMatcher": []
+    },
+    {
+      "label": "FitFlow: 启动前端",
+      "type": "shell",
+      "command": "npm run dev -- --host 127.0.0.1",
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "FitFlow: 启动后端",
+      "type": "shell",
+      "command": "mvn spring-boot:run",
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}
