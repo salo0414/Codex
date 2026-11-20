@@ -16,12 +16,17 @@ Vue 3 + Spring Boot + MySQL 的全栈管理系统 MVP，包含运营总览、会
 ```powershell
 $env:MYSQL_ROOT_PASSWORD = "请设置独立强密码"
 $env:MYSQL_PASSWORD = "请设置独立强密码"
+$env:REDIS_PASSWORD = "请设置独立 Redis 密码"
 $env:DB_USERNAME = "fitflow"
 $env:DB_PASSWORD = $env:MYSQL_PASSWORD
 $env:ADMIN_USERNAME = "admin"
 $env:ADMIN_PASSWORD = "请设置独立强密码"
 docker compose up -d
 ```
+
+如果 MySQL 已在本机单独运行，只启动 Redis：设置 `$env:REDIS_PASSWORD` 后执行 `docker compose -f docker-compose.redis.yml up -d`。IDEA 的 Spring Boot 运行配置也要设置相同的 `REDIS_PASSWORD`。
+
+普通会员可以在登录页注册；管理员需启动 Redis 与 MySQL 后运行后端。注册账户初始会籍为“待激活”，管理员在会员管理中设置会籍类型、状态为“正常”并填写有效期后，会员即可预约课程。
 
 在 IntelliJ IDEA 中，也可将这些变量配置到 Spring Boot 运行配置的“环境变量”字段。
 

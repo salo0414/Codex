@@ -2,11 +2,17 @@ server:
   port: ${SERVER_PORT:8080}
 spring:
   session:
+    store-type: redis
     timeout: 8h
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   datasource:
     url: ${DB_URL:jdbc:mysql://localhost:3306/fitflow?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
-    username: root
-    password: 123456
+    username: ${DB_USERNAME:fitflow}
+    password: ${DB_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: update
@@ -18,5 +24,5 @@ spring:
     time-zone: Asia/Shanghai
 fitflow:
   admin:
-    username: admin
-    password: 123456
+    username: ${ADMIN_USERNAME:admin}
+    password: ${ADMIN_PASSWORD}

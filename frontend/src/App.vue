@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import {
   LayoutDashboard,
   UsersRound,
@@ -29,12 +29,14 @@ const page = ref("总览"),
     { label: "课程管理", icon: CalendarDays },
     { label: "教练团队", icon: UserRound },
     { label: "预约管理", icon: Dumbbell },
+    { label: "用户管理", icon: UserRound },
   ];
 // 集中保存页面数据、筛选条件和弹窗状态，便于各管理页共享并在变更后统一刷新。
 const members = ref([]),
   classes = ref([]),
   trainers = ref([]),
   bookings = ref([]),
+  accounts = ref([]),
   stats = ref({}),
   search = ref(""),
   dialog = ref(""),
@@ -60,26 +62,87 @@ const memberForm = ref({
   bookingForm = ref({ memberId: "", classId: "" });
 // 登录状态以服务端会话为准；浏览器本地状态不能替代后端身份校验。
 const authenticated = ref(false),
+  role = ref(""),
+  selectedRole = ref(""),
   loginForm = ref({ username: "", password: "" }),
   loginError = ref(""),
-  showPassword = ref(false);
+  showPassword = ref(false),
+  registerMode = ref(false),
+  registerError = ref(""),
+  registerForm = ref({ name: "", phone: "", password: "" }),
+  profile = ref(null),
+  userPage = ref("课程");
+const saving = ref(false), successMessage = ref("");
+let restoringHistory = false;
+
+// 页面导航写入浏览器历史，让刷新恢复当前位置、后退回到上一管理页。
+watch(
+  page,
+  (currentPage) => {
+    if (!authenticated.value || restoringHistory) return;
+    history.pushState(
+      { fitflowPage: currentPage, successMessage: successMessage.value },
+      "",
+      `#${encodeURIComponent(currentPage)}`,
+    );
+  },
+  { flush: "sync" },
+);
+
+function restorePageFromHistory(state) {
+  const savedPage = state?.fitflowPage;
+  const allowedPages = [...nav.map((item) => item.label), "操作成功"];
+  restoringHistory = true;
+  page.value = allowedPages.includes(savedPage) ? savedPage : "总览";
+  successMessage.value = state?.successMessage || "";
+  restoringHistory = false;
+}
+
+function handleBrowserBack(event) {
+  if (!authenticated.value) return;
+  dialog.value = "";
+  mobileOpen.value = false;
+  restorePageFromHistory(event.state);
+}
+
 async function login() {
   loginError.value = "";
   try {
-    await api("/auth/login", {
+    const identity = await api("/auth/login", {
       method: "POST",
       body: JSON.stringify({
         username: loginForm.value.username.trim(),
         password: loginForm.value.password,
+        role: selectedRole.value,
       }),
     });
     authenticated.value = true;
+    role.value = identity.role;
+    history.replaceState(
+      { fitflowPage: page.value, successMessage: successMessage.value },
+      "",
+      `#${encodeURIComponent(page.value)}`,
+    );
     loginForm.value.password = "";
     await load();
   } catch (e) {
-    loginError.value = e.message.includes("401")
-      ? "账号或密码不正确，请重试。"
-      : "登录失败，请确认后端服务正常。";
+    loginError.value = e.message;
+  }
+}
+async function register() {
+  if (selectedRole.value !== "USER") return;
+  registerError.value = "";
+  try {
+    await api("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(registerForm.value),
+    });
+    registerMode.value = false;
+    loginForm.value.username = registerForm.value.phone;
+    loginForm.value.password = "";
+    loginError.value = "注册成功，请登录。会籍激活后即可预约课程。";
+  } catch (e) {
+    registerError.value = e.message;
   }
 }
 async function logout() {
@@ -87,6 +150,8 @@ async function logout() {
     await api("/auth/logout", { method: "POST" });
   } finally {
     authenticated.value = false;
+    role.value = "";
+    history.replaceState(null, "", location.pathname);
     page.value = "总览";
     members.value = [];
     classes.value = [];
@@ -97,8 +162,10 @@ async function logout() {
 // 刷新或重新打开页面时，向后端确认会话，而不是信任客户端缓存。
 async function checkSession() {
   try {
-    await api("/auth/me");
+    const identity = await api("/auth/me");
     authenticated.value = true;
+    role.value = identity.role;
+    restorePageFromHistory(history.state);
     await load();
   } catch {
     authenticated.value = false;
@@ -126,28 +193,74 @@ async function api(url, options = {}) {
     ...options,
     headers: { "Content-Type": "application/json", ...(options.headers || {}) },
   });
-  if (!r.ok) throw new Error(`${r.status} ${(await r.text()) || "请求失败"}`);
+  if (!r.ok) {
+    const text = await r.text();
+    let message = text || "请求失败";
+    try {
+      const payload = JSON.parse(text);
+      message = payload.message || payload.detail || message;
+    } catch {}
+    throw new Error(message);
+  }
   return r.status === 204 ? null : r.json();
 }
 // 登录后一次性加载仪表盘及各管理页所需数据。
 async function load() {
   try {
     error.value = "";
+    if (role.value === "USER") {
+      [classes.value, bookings.value, profile.value] = await Promise.all([
+        api("/classes"),
+        api("/bookings"),
+        api("/profile"),
+      ]);
+      return;
+    }
     [
       stats.value,
       members.value,
       classes.value,
       trainers.value,
       bookings.value,
+      accounts.value,
     ] = await Promise.all([
       api("/dashboard"),
       api("/members"),
       api("/classes"),
       api("/trainers"),
       api("/bookings"),
+      api("/users"),
     ]);
   } catch (e) {
-    error.value = "暂时无法连接后端，请确认 Spring Boot 与 MySQL 已启动。";
+    error.value = "暂时无法连接服务，请确认 Spring Boot、MySQL 和 Redis 已启动。";
+  }
+}
+async function bookClass(classId) {
+  try {
+    await api("/bookings", { method: "POST", body: JSON.stringify({ classId }) });
+    await load();
+    userPage.value = "我的预约";
+  } catch (e) {
+    alert(e.message);
+  }
+}
+async function cancelOwnBooking(id) {
+  try {
+    await api(`/bookings/${id}`, { method: "DELETE" });
+    await load();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+async function saveProfile() {
+  try {
+    profile.value = await api("/profile", {
+      method: "PUT",
+      body: JSON.stringify({ name: profile.value.name, phone: profile.value.phone }),
+    });
+    alert("个人资料已保存");
+  } catch (e) {
+    alert(e.message);
   }
 }
 function open(kind, item) {
@@ -184,6 +297,8 @@ function close() {
 }
 // 会员与课程表单根据是否包含 ID 选择新增或更新接口。
 async function saveMember() {
+  if (saving.value) return;
+  saving.value = true;
   try {
     const f = { ...memberForm.value };
     await api(f.id ? `/members/${f.id}` : "/members", {
@@ -191,9 +306,13 @@ async function saveMember() {
       body: JSON.stringify(f),
     });
     close();
+    successMessage.value = f.id ? "会员资料已更新" : "会员已成功添加";
+    page.value = "操作成功";
     await load();
   } catch (e) {
     alert(e.message);
+  } finally {
+    saving.value = false;
   }
 }
 async function saveClass() {
@@ -245,86 +364,81 @@ async function remove(url) {
       alert(e.message);
     }
 }
-onMounted(checkSession);
+onMounted(() => {
+  window.addEventListener("popstate", handleBrowserBack);
+  checkSession();
+});
 </script>
 
 <template>
   <div v-if="!authenticated" class="login-page">
-    <div class="login-left">
-      <div class="login-brand">
-        <span class="brand-mark"><Activity :size="21" /></span
-        ><span class="brand-name"
-          >fit<span>flow</span><small>FITNESS STUDIO</small></span
-        >
-      </div>
-      <div class="login-message">
-        <div class="login-kicker"><span></span> YOUR SPACE TO GROW</div>
-        <h1>让每一次坚持，<br />都看得见改变。</h1>
-        <p>用清晰的数据与贴心的管理，<br />陪伴每一位会员，成为更好的自己。</p>
-        <div class="login-quote">
-          <span>“</span>
-          <div>
-            <b>Small steps. Stronger every day.</b
-            ><small>每一次训练，都是向前一步。</small>
-          </div>
-        </div>
-      </div>
-      <div class="login-left-footer">
-        FITFLOW STUDIO <span>·</span> MOVE WITH PURPOSE
-      </div>
-      <div class="login-decoration deco-one"></div>
-      <div class="login-decoration deco-two"></div>
-    </div>
     <div class="login-right">
       <div class="login-mobile-brand">
         <span class="brand-mark"><Activity :size="21" /></span
-        ><span class="brand-name">fit<span>flow</span></span>
+        ><span class="brand-name">fit<span>flow</span><small>FITNESS STUDIO</small></span>
       </div>
-      <form class="login-card" @submit.prevent="login">
-        <div class="login-welcome">
-          <div class="eyebrow"><span></span> 欢迎回来</div>
-          <h2>登录你的工作台</h2>
-          <p>输入账号信息，继续管理你的健身空间。</p>
-        </div>
-        <label class="login-label"
-          >账号
-          <div class="login-input">
-            <UserRound :size="17" /><input
-              v-model="loginForm.username"
-              autocomplete="username"
-              placeholder="请输入管理员账号"
-              required
-            /></div></label
-        ><label class="login-label"
-          >密码
-          <div class="login-input">
-            <LockKeyhole :size="17" /><input
-              v-model="loginForm.password"
-              :type="showPassword ? 'text' : 'password'"
-              autocomplete="current-password"
-              placeholder="请输入登录密码"
-              required
-            /><button
-              type="button"
-              @click="showPassword = !showPassword"
-              :aria-label="showPassword ? '隐藏密码' : '显示密码'"
-            >
-              <component :is="showPassword ? EyeOff : Eye" :size="17" />
-            </button></div
-        ></label>
-        <div class="login-options">
-          <span>安全管理员登录</span><span>会话将在浏览器关闭后结束</span>
-        </div>
-        <p v-if="loginError" class="login-error">{{ loginError }}</p>
-        <button class="login-submit" type="submit">
-          登录工作台 <ArrowUpRight :size="17" />
+      <section v-if="!selectedRole" class="login-card role-select">
+        <div class="login-welcome"><h2>选择登录身份</h2></div>
+        <button class="role-choice" @click="selectedRole = 'USER'">
+          <span class="role-icon"><UserRound :size="20" /></span>
+          <span><b>会员用户</b><small>浏览课程与管理预约</small></span>
+          <ChevronRight :size="18" />
         </button>
-        <div class="login-security">
-          <LockKeyhole :size="13" /> 安全连接 · FitFlow Studio
+        <button class="role-choice" @click="selectedRole = 'ADMIN'">
+          <span class="role-icon"><LayoutDashboard :size="20" /></span>
+          <span><b>管理员</b><small>管理会员、课程与门店运营</small></span>
+          <ChevronRight :size="18" />
+        </button>
+      </section>
+      <form v-else class="login-card" @submit.prevent="registerMode ? register() : login()">
+        <button type="button" class="role-back" @click="selectedRole = ''; registerMode = false; loginError = ''; registerError = ''">‹ 更换身份</button>
+        <div class="login-welcome">
+          <h2>{{ registerMode ? "注册会员" : selectedRole === 'ADMIN' ? "管理员登录" : "会员登录" }}</h2>
+          <p v-if="registerMode">会员会籍由管理员开通后即可预约课程。</p>
         </div>
+        <label v-if="registerMode" class="login-label">姓名
+          <div class="login-input"><UserRound :size="17" /><input v-model="registerForm.name" placeholder="姓名" maxlength="80" required /></div>
+        </label>
+        <label class="login-label">{{ registerMode || selectedRole === 'USER' ? "手机号" : "管理员账号" }}
+          <div class="login-input"><UserRound :size="17" /><input v-if="registerMode" v-model="registerForm.phone" type="tel" pattern="1[3-9][0-9]{9}" maxlength="11" autocomplete="username" placeholder="手机号" required /><input v-else-if="selectedRole === 'USER'" v-model="loginForm.username" type="tel" autocomplete="username" placeholder="手机号" required /><input v-else v-model="loginForm.username" autocomplete="username" placeholder="管理员账号" required /></div>
+        </label>
+        <label class="login-label">密码
+          <div class="login-input"><LockKeyhole :size="17" /><input v-if="registerMode" v-model="registerForm.password" :type="showPassword ? 'text' : 'password'" autocomplete="new-password" minlength="8" placeholder="至少 8 位" required /><input v-else v-model="loginForm.password" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="请输入密码" required /><button type="button" @click="showPassword = !showPassword" :aria-label="showPassword ? '隐藏密码' : '显示密码'"><component :is="showPassword ? EyeOff : Eye" :size="17" /></button></div>
+        </label>
+        <p v-if="loginError && !registerMode" class="login-error">{{ loginError }}</p>
+        <p v-if="registerError && registerMode" class="login-error">{{ registerError }}</p>
+        <button class="login-submit" type="submit">{{ registerMode ? "注册" : "登录" }} <ArrowUpRight :size="17" /></button>
+        <button v-if="selectedRole === 'USER'" type="button" class="auth-mode-toggle" @click="registerMode = !registerMode; loginError = ''; registerError = ''">{{ registerMode ? "已有账户？返回登录" : "注册会员账户" }}</button>
       </form>
-      <div class="login-help">需要帮助？请联系门店系统管理员</div>
     </div>
+  </div>
+  <div v-else-if="role === 'USER'" class="user-shell">
+    <header class="user-header">
+      <a class="brand" href="#" @click.prevent="userPage = '课程'"><span class="brand-mark"><Activity :size="21" /></span><span class="brand-name">fit<span>flow</span><small>MEMBER SPACE</small></span></a>
+      <nav><button :class="{active:userPage==='课程'}" @click="userPage='课程'">课程浏览</button><button :class="{active:userPage==='我的预约'}" @click="userPage='我的预约'">我的预约</button><button :class="{active:userPage==='个人资料'}" @click="userPage='个人资料'">个人资料</button></nav>
+      <button class="secondary-btn" @click="logout">退出登录</button>
+    </header>
+    <main class="user-content">
+      <div v-if="error" class="error-banner">{{ error }}</div>
+      <template v-if="userPage === '课程'">
+        <div class="page-heading"><div><div class="eyebrow">FITNESS CLASSES</div><h1>课程浏览</h1><p>选择课程，开启今天的训练。</p></div></div>
+        <div class="user-class-grid">
+          <article v-for="c in classes" :key="c.id" class="panel user-class-card">
+            <div class="eyebrow">{{ c.category || '团体课程' }}</div><h2>{{ c.name }}</h2><p>教练：{{ c.trainer || '待安排' }}</p><p>{{ c.startTime ? new Date(c.startTime).toLocaleString('zh-CN') : '时间待定' }}</p><p>{{ c.room || '训练室' }} · 剩余 {{ Math.max(0, c.capacity - c.booked) }} 个名额</p>
+            <button class="primary-btn" :disabled="c.booked >= c.capacity" @click="bookClass(c.id)">{{ c.booked >= c.capacity ? '名额已满' : '预约课程' }} <ChevronRight :size="15" /></button>
+          </article>
+          <section v-if="!classes.length" class="panel empty-state">暂时没有开放课程。</section>
+        </div>
+      </template>
+      <template v-else-if="userPage === '我的预约'">
+        <div class="page-heading"><div><div class="eyebrow">MY BOOKINGS</div><h1>我的预约</h1><p>查看或取消你的课程预约。</p></div></div>
+        <section class="panel user-bookings"><article v-for="b in bookings" :key="b.id"><div><b>{{ b.className }}</b><span>预约时间：{{ new Date(b.bookedAt).toLocaleString('zh-CN') }}</span><span>状态：{{ b.status }}</span></div><button class="row-action danger" @click="cancelOwnBooking(b.id)">取消预约</button></article><div v-if="!bookings.length" class="empty-state">你还没有预约课程。</div></section>
+      </template>
+      <template v-else>
+        <div class="page-heading"><div><div class="eyebrow">MY PROFILE</div><h1>个人资料</h1><p>会籍状态：{{ profile?.status }} · {{ profile?.membershipType }}</p></div></div>
+        <form v-if="profile" class="panel user-profile" @submit.prevent="saveProfile"><label>姓名<input v-model="profile.name" maxlength="80" required /></label><label>手机号<input v-model="profile.phone" type="tel" pattern="1[3-9][0-9]{9}" maxlength="11" required /></label><label>会籍到期<input :value="profile.expireDate || '尚未开通'" disabled /></label><button class="primary-btn">保存资料 <ChevronRight :size="15" /></button></form>
+      </template>
+    </main>
   </div>
   <div v-else class="shell">
     <aside class="sidebar" :class="{ 'sidebar-open': mobileOpen }">
@@ -855,7 +969,25 @@ onMounted(checkSession);
             </div>
           </div></template
         >
-        <template v-else
+        <template v-else-if="page === '用户管理'"
+          ><div class="page-heading"><div><div class="eyebrow">ACCOUNT ADMINISTRATION</div><h1>用户管理</h1><p>查看注册账户和会员激活情况；在会员管理中设置会籍状态与有效期。</p></div></div>
+          <section class="panel table-panel"><div class="table-scroll"><table><thead><tr><th>账户</th><th>角色</th><th>会员档案</th><th>会籍状态</th><th>操作</th></tr></thead><tbody><tr v-for="account in accounts" :key="account.id"><td>{{ account.username }}</td><td>{{ account.role === 'ADMIN' ? '管理员' : '普通用户' }}</td><td>{{ account.memberName }}</td><td><span class="status-pill" :class="account.status === '正常' ? 'good' : ''">{{ account.status }}</span></td><td><button v-if="account.memberId" class="row-action" @click="page='会员管理'; search=account.username">查看会员档案</button><span v-else>系统管理员</span></td></tr><tr v-if="!accounts.length"><td colspan="5" class="table-empty">暂无账户</td></tr></tbody></table></div></section></template
+        ><template v-else-if="page === '操作成功'"
+          ><section class="success-screen panel">
+            <span class="success-check">✓</span>
+            <div class="eyebrow">ACTION COMPLETED</div>
+            <h1>{{ successMessage }}</h1>
+            <p>信息已保存，可以继续管理会员档案。</p>
+            <div class="success-actions">
+              <button class="primary-btn" @click="page = '会员管理'">
+                查看会员档案 <ArrowUpRight :size="16" />
+              </button>
+              <button class="secondary-btn" @click="page = '总览'">
+                返回首页
+              </button>
+            </div>
+          </section></template
+        ><template v-else
           ><div class="page-heading">
             <div>
               <div class="eyebrow">CLASS BOOKINGS</div>
@@ -978,11 +1110,18 @@ onMounted(checkSession);
             >姓名<input
               v-model="memberForm.name"
               required
+              maxlength="80"
               placeholder="请输入会员姓名" /></label
           ><label
             >手机号码<input
               v-model="memberForm.phone"
+              type="tel"
               required
+              minlength="11"
+              maxlength="11"
+              pattern="1[3-9][0-9]{9}"
+              title="请输入有效的 11 位手机号"
+              inputmode="numeric"
               placeholder="请输入手机号"
           /></label>
           <div class="form-row">
@@ -993,6 +1132,7 @@ onMounted(checkSession);
                 <option>半年卡</option>
                 <option>年卡</option>
                 <option>次卡</option>
+              <option>未开通</option>
               </select></label
             ><label
               >会籍到期<input v-model="memberForm.expireDate" type="date"
@@ -1003,6 +1143,8 @@ onMounted(checkSession);
               <option>正常</option>
               <option>已过期</option>
               <option>暂停</option>
+              <option>待激活</option>
+              <option>停用</option>
             </select></label
           ></template
         ><template v-else-if="dialog === 'class'"
@@ -1093,12 +1235,15 @@ onMounted(checkSession);
         <div class="modal-actions">
           <button type="button" class="secondary-btn" @click="close">
             取消</button
-          ><button type="submit" class="primary-btn">
+          ><button type="submit" class="primary-btn" :disabled="saving">
             {{
-              (dialog === "member" && memberForm.id) ||
-              (dialog === "class" && classForm.id)
-                ? "保存修改"
-                : "确认创建"
+              saving
+                ? "正在保存…"
+                : dialog === "member" && memberForm.id
+                  ? "保存修改"
+                  : dialog === "class" && classForm.id
+                    ? "保存修改"
+                    : "确认创建"
             }}
             <ChevronRight :size="15" />
           </button>

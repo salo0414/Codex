@@ -282,3 +282,122 @@
     bottom: 20px;
   }
 }
+
+/* 登录流程收敛为身份选择与对应表单，减少分散的说明文案。 */
+.login-page {
+  display: flex;
+  justify-content: center;
+  background: #f6f7f3;
+}
+.login-left {
+  display: none;
+}
+.login-right {
+  width: min(100%, 480px);
+  min-height: 100vh;
+  padding: 36px 30px;
+}
+.login-mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 54px;
+}
+.login-mobile-brand .brand-name {
+  color: #253027;
+}
+.login-mobile-brand .brand-name small {
+  display: block;
+  margin-top: 3px;
+  color: #89918a;
+  font-size: 8px;
+  letter-spacing: 1.4px;
+}
+.login-card {
+  width: min(390px, 100%);
+}
+.login-welcome {
+  margin-bottom: 24px;
+}
+.login-welcome h2 {
+  margin: 0;
+}
+.login-welcome p {
+  margin-top: 9px;
+}
+.login-label {
+  margin: 17px 0;
+}
+.login-help,
+.login-security,
+.login-options {
+  display: none;
+}
+.role-select .login-welcome {
+  margin-bottom: 24px;
+}
+.role-choice {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin: 10px 0;
+  padding: 15px;
+  text-align: left;
+  border: 1px solid #e5e9e1;
+  border-radius: 11px;
+  color: #273128;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 0.18s, transform 0.18s;
+}
+.role-choice:hover {
+  border-color: #a9c88d;
+  transform: translateY(-1px);
+}
+.role-choice > span:nth-child(2) {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+}
+.role-choice b {
+  font-size: 13px;
+}
+.role-choice small {
+  color: #89918a;
+  font-size: 10px;
+}
+.role-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #5b8143;
+  background: #eff5e9;
+}
+.role-back {
+  margin: 0 0 20px;
+  padding: 0;
+  border: 0;
+  color: #71806e;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.auth-mode-toggle {
+  padding: 0;
+  color: #66874e;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+@media (max-width: 760px) {
+  .login-right {
+    padding: 28px 23px;
+  }
+  .login-mobile-brand {
+    margin-bottom: 54px;
+  }
+}

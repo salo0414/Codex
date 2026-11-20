@@ -1,4 +1,18 @@
 services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: fitflow-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD before starting Redis}"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '${REDIS_PASSWORD}' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
   mysql:
     image: mysql:8.4
     container_name: fitflow-mysql
@@ -25,3 +39,4 @@ services:
       retries: 10
 volumes:
   mysql_data:
+  redis_data:

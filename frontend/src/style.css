@@ -410,6 +410,45 @@ button {
   background: #2b4031;
   transform: translateY(-1px);
 }
+.primary-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+  transform: none;
+}
+.success-screen {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px;
+}
+.success-check {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  border-radius: 50%;
+  background: #eff7e8;
+  color: #6c9b4e;
+  font-size: 28px;
+}
+.success-screen h1 {
+  margin: 10px 0 6px;
+  font-size: 23px;
+}
+.success-screen p {
+  margin: 0;
+  color: #89928a;
+  font-size: 11px;
+}
+.success-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 22px;
+}
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1515,5 +1554,120 @@ tbody tr:last-child td {
   }
   .modal {
     padding: 18px;
+  }
+}
+
+.auth-mode-toggle {
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  background: transparent;
+  color: #66874e;
+  cursor: pointer;
+  font: inherit;
+}
+.user-shell {
+  min-height: 100vh;
+  background: #f6f7f3;
+}
+.user-header {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 12px max(24px, calc((100vw - 1180px) / 2));
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+.user-header nav {
+  display: flex;
+  gap: 8px;
+}
+.user-header nav button {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 10px 14px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.user-header nav button.active {
+  background: #eff5e9;
+  color: #42652f;
+}
+.user-content {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 44px 24px;
+}
+.user-class-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 18px;
+}
+.user-class-card {
+  padding: 24px;
+}
+.user-class-card h2 {
+  margin: 14px 0;
+}
+.user-class-card p,
+.user-bookings span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.user-class-card .primary-btn {
+  margin-top: 12px;
+}
+.user-bookings,
+.user-profile {
+  padding: 22px;
+}
+.user-bookings article {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.user-bookings article div {
+  display: grid;
+  gap: 6px;
+}
+.user-profile {
+  display: grid;
+  gap: 18px;
+  max-width: 560px;
+}
+.user-profile label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+}
+.user-profile input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  font: inherit;
+  color: var(--ink);
+}
+@media (max-width: 680px) {
+  .user-header {
+    flex-wrap: wrap;
+    padding: 12px 16px;
+  }
+  .user-header nav {
+    order: 3;
+    width: 100%;
+    justify-content: space-between;
+  }
+  .user-header nav button {
+    padding: 9px 8px;
+    font-size: 12px;
+  }
+  .user-content {
+    padding: 28px 16px;
   }
 }
